@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>泰拉瑞亚种子随机组合器</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Microsoft YaHei", sans-serif;
+    background: #1a1a2e; color: #e8e8e8; line-height: 1.6;
+  }
+  .container { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 24px; text-align: center; margin: 0 0 8px; color: #ffd166; }
+  .subtitle { text-align: center; font-size: 13px; color: #888; margin-bottom: 20px; }
+
+  .controls {
+    display: flex; justify-content: center; gap: 12px;
+    margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .controls button {
+    padding: 12px 32px; font-size: 16px; border: none; border-radius: 8px;
+    cursor: pointer; background: #ffd166; color: #1a1a2e; font-weight: 700;
+    transition: transform 0.1s, background 0.2s;
+  }
+  .controls button:hover { background: #ffdd88; }
+  .controls button:active { transform: scale(0.97); }
+  .controls button.secondary {
+    background: #2a2a44; color: #ccc; font-weight: 500; padding: 12px 20px;
+  }
+  .controls button.secondary:hover { background: #3a3a5c; }
+
+  /* ================= 折叠过滤区（两个） ================= */
+  .filters {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 14px; margin-bottom: 24px;
+  }
+  @media (max-width: 720px) { .filters { grid-template-columns: 1fr; } }
+
+  .filter-group {
+    background: #16213e; border-radius: 10px; padding: 4px 12px 8px;
+    border-top: 3px solid #ffd166;
+  }
+  .filter-group.gameplay { border-top-color: #06d6a0; }
+
+  .filter-title {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    background: transparent; border: none; border-bottom: 1px solid #2a2a44;
+    padding: 10px 4px; font-size: 13px; font-weight: 700; color: #fff;
+    cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
+    font-family: inherit; text-align: left; transition: background 0.15s;
+  }
+  .filter-title:hover { background: #1f2b4d; border-radius: 4px; }
+  .filter-title:active { background: #26365e; }
+
+  .filter-arrow {
+    transition: transform 0.2s; font-size: 12px; color: #888; margin-left: 6px;
+  }
+  .filter-group.expanded .filter-arrow { transform: rotate(90deg); }
+
+  .filter-list {
+    max-height: 0; overflow: hidden; opacity: 0;
+    transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;
+    padding: 0 4px;
+  }
+  .filter-group.expanded .filter-list {
+    max-height: 300px; overflow-y: auto; opacity: 1;
+    padding: 8px 4px 4px;
+  }
+
+  .filter-item {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: #ccc; cursor: pointer;
+    padding: 4px 6px; border-radius: 4px; transition: background 0.15s;
+    user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  .filter-item:hover { background: #1f2b4d; }
+  .filter-item input[type="checkbox"] {
+    width: 14px; height: 14px; accent-color: #ef476f;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .filter-item.checked span { color: #ef476f; text-decoration: line-through; }
+
+  /* ================= 结果区 ================= */
+  .section-title {
+    font-size: 18px; color: #06d6a0; margin: 24px 0 12px;
+    padding-bottom: 6px; border-bottom: 1px solid #333;
+  }
+
+  /* 每行最多三个，并排显示 */
+  .seed-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  @media (max-width: 720px) {
+    .seed-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .seed-grid { grid-template-columns: 1fr; }
+  }
+
+  .seed-card {
+    background: #16213e; border-radius: 10px; padding: 12px 14px;
+    border-left: 4px solid #ffd166;
+    display: flex; flex-direction: column;
+  }
+  .seed-card.gameplay { border-left-color: #06d6a0; }
+  .seed-card.redundant { border-left-color: #ffa500; background: #2a2416; }
+  .seed-name { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .seed-sub { font-size: 11px; color: #888; font-weight: 400; margin-left: 4px; }
+  .seed-text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px; color: #ffd166; background: #0f0f1a;
+    padding: 2px 7px; border-radius: 4px; display: inline-block;
+    margin: 4px 0; word-break: break-all;
+  }
+  .seed-desc { font-size: 12.5px; color: #bbb; margin-top: 4px; }
+  .seed-tag {
+    display: inline-block; font-size: 10px; padding: 2px 6px;
+    border-radius: 10px; margin-left: 6px; vertical-align: middle;
+  }
+  .tag-redundant { background: #ffa500; color: #1a1a2e; }
+  .empty { color: #666; font-style: italic; padding: 8px 0; }
+  .banner {
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 20px;
+    font-size: 14px; border-left: 4px solid;
+  }
+  .banner.warn { background: #2a2416; border-left-color: #ffa500; color: #ffd9a0; }
+  .banner.ok { background: #162a1e; border-left-color: #06d6a0; color: #a8f0d0; }
+
+  /* ================= 规则区（放最下面） ================= */
+  .rules-box {
+    background: #0f0f1a; border: 1px solid #333; border-radius: 10px;
+    padding: 14px 18px; margin-top: 32px; font-size: 13px;
+  }
+  .rules-box .rules-title {
+    color: #06d6a0; font-weight: 700; margin-bottom: 6px; font-size: 14px;
+  }
+  .rules-box code {
+    background: #1a1a2e; padding: 1px 6px; border-radius: 4px; color: #ffd166;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .rules-box ul { margin: 4px 0 0 18px; padding: 0; }
+  .rules-box li { margin: 2px 0; color: #bbb; }
+
+  /* ================= 底部参考链接 ================= */
+  .refs {
+    margin-top: 24px; padding: 14px 18px;
+    background: #0f0f1a; border: 1px solid #333; border-radius: 10px;
+    font-size: 13px;
+  }
+  .refs-title { color: #06d6a0; font-weight: 700; margin-bottom: 6px; font-size: 14px; }
+  .refs a {
+    color: #ffd166; text-decoration: none; margin-right: 16px;
+    display: inline-block; margin-bottom: 4px;
+    word-break: break-all;
+  }
+  .refs a:hover { text-decoration: underline; }
+
+  .footer { text-align: center; font-size: 12px; color: #555; margin-top: 20px; }
+  @media (max-width: 600px) {
+    body { padding: 16px; }
+    h1 { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>泰拉瑞亚种子随机组合器</h1>
+  <div class="subtitle">A / B / C 均可为 0，但地形总数至少 1 · 已启用冲突拦截与提示</div>
+
+  <div class="controls">
+    <button id="rollBtn">重新生成一组</button>
+    <button id="clearBtn" class="secondary">清空勾选</button>
+  </div>
+
+  <!-- 两个折叠过滤区（外观已删除） -->
+  <div class="filters" id="filtersBox">
+    <div class="filter-group terrain" id="groupTerrain">
+      <button type="button" class="filter-title" data-target="filterTerrain">
+        <span>🚫 不想玩到的地形种子</span>
+        <span class="filter-arrow">▸</span>
+      </button>
+      <div id="filterTerrain" class="filter-list"></div>
+    </div>
+    <div class="filter-group gameplay" id="groupGameplay">
+      <button type="button" class="filter-title" data-target="filterGameplay">
+        <span>🚫 不想玩到的玩法种子</span>
+        <span class="filter-arrow">▸</span>
+      </button>
+      <div id="filterGameplay" class="filter-list"></div>
+    </div>
+  </div>
+
+  <div id="output"></div>
+
+  <!-- 规则区放最下面 -->
+  <div class="rules-box">
+    <div class="rules-title">📋 当前抽取规则（在脚本顶部 ROLL_RULES 中修改）</div>
+    <ul id="rulesList"></ul>
+  </div>
+
+  <!-- 参考链接 -->
+  <div class="refs">
+    <div class="refs-title">🔗 参考链接</div>
+    <a href="https://terraria.wiki.gg/zh/wiki/特殊世界种子" target="_blank" rel="noopener">
+      terraria.wiki.gg/zh/wiki/特殊世界种子
+    </a>
+    <a href="https://terraria.wiki.gg/zh/wiki/秘密世界种子" target="_blank" rel="noopener">
+      terraria.wiki.gg/zh/wiki/秘密世界种子
+    </a>
+  </div>
+
+  <div class="footer">数据仅用于随机组合参考，具体效果以游戏内为准。</div>
+</div>
+
+<script>
+/* ============================================================
+ * ★★★★★  抽取规则配置区  ★★★★★
+ * ============================================================ */
+const ROLL_RULES = {
+  A: { min: 0, max: 2, allowZero: true },
+  B: { min: 0, max: 2, allowZero: true },
+  C: { min: 0, max: 1, allowZero: true },
+  GAMEPLAY: { min: 1, max: 2, allowZero: false },
+  VISUAL: { min: 0, max: 0, allowZero: true },
+  GLOBAL: {
+    maxTotalTerrain: 4,
+    minTotalTerrain: 1,
+  },
+};
+/* ============================================================
+ * ★★★★★  配置区结束  ★★★★★
+ * ============================================================ */
+
+
+/* ============================================================
+ * 种子数据
+ * ============================================================ */
+const SEEDS = [
+  // ---------- 地形变化 A ----------
+  { cat: "terrain", sub: "A", domain: "world_shape", name: "Skyblock / 空岛", text: "skyblock",
+    desc: "世界悬浮于天际，初始资源极少，需要白手起家逐步构建世界。" },
+  { cat: "terrain", sub: "A", domain: "world_shape", name: "圆形地块", text: "planetoids",
+    desc: "世界由小型星体组成。" },
+  { cat: "terrain", sub: "A", domain: "surface_level", name: "太空地表", text: "such great heights",
+    desc: "地表层位置更高，抬到太空高度。" },
+  { cat: "terrain", sub: "A", domain: "surface_level", name: "无地表", text: "mole people",
+    desc: "世界没有地表层。" },
+  { cat: "terrain", sub: "A", domain: "progression", name: "Remix / 别挖上来", text: "dont dig up",
+    desc: "游戏流程反转，玩家在地狱出生，矿物生成和生物群落层次倒置，地表被邪恶地形覆盖，向导被税收官替换。" },
+  { cat: "terrain", sub: "A", domain: "fusion_meta", name: "Zenith / 天顶", text: "get fixed boi",
+    desc: "融合多个特殊种子的主要特色，并加入全新惊喜，专为击垮玩家而设计。" },
+
+  // ---------- 地形变化 B ----------
+  { cat: "terrain", sub: "B", domain: "biome_replace", name: "不是蜜蜂", text: "not the bees",
+    desc: "世界以蜂为主题，大片区域被丛林、蜂巢、蜂蜜取代，大海也是蜂蜜，向导被商人替换，地表生成蜂巢怪物。" },
+  { cat: "terrain", sub: "B", domain: "evil_type", name: "醉酒世界", text: "5162020",
+    desc: "同时生成腐化和猩红，矿石双倍，地牢入口在世界树下，向导被派对女孩替换，地狱布局改变。" },
+  { cat: "terrain", sub: "B", domain: "liquid", name: "多液世界", text: "waterpark",
+    desc: "世界被水淹没。" },
+  { cat: "terrain", sub: "B", domain: "evil_type", name: "世界被感染", text: "purify this",
+    desc: "整个世界被腐化或猩红侵蚀。" },
+  { cat: "terrain", sub: "B", domain: "surface_biome", name: "沙漠地表", text: "sandy britches",
+    desc: "世界拥有沙漠地表。" },
+  { cat: "terrain", sub: "B", domain: "surface_biome", name: "蘑菇地表", text: "toadstool",
+    desc: "世界拥有蘑菇地表。" },
+  { cat: "terrain", sub: "B", domain: "surface_biome", name: "冰封世界", text: "winter is coming",
+    desc: "世界由冰雪组成。" },
+  { cat: "terrain", sub: "B", domain: "surface_biome", name: "地表神圣", text: "does that sparkle",
+    desc: "世界拥有神圣地表。" },
+
+  // ---------- 地形变化 C ----------
+  { cat: "terrain", sub: "C", domain: "", name: "多洞世界", text: "jagged rocks",
+    desc: "世界有额外的裂隙和深坑。" },
+  { cat: "terrain", sub: "C", domain: "", name: "无蜘蛛窝", text: "arachnophobia",
+    desc: "世界没有蜘蛛洞。" },
+  { cat: "terrain", sub: "C", domain: "evil_presence", name: "无感染", text: "fish mox",
+    desc: "世界开局没有腐化或猩红。" },
+  { cat: "terrain", sub: "C", domain: "", name: "巨大废屋", text: "abandoned manors",
+    desc: "世界拥有更大的地下小屋。" },
+  { cat: "terrain", sub: "C", domain: "", name: "添加传送机", text: "beam me up",
+    desc: "世界各地散布着传送机。" },
+  { cat: "terrain", sub: "C", domain: "trap_density", name: "真没陷阱", text: "more traps please",
+    desc: "世界没有陷阱。" },
+  { cat: "terrain", sub: "C", domain: "seasonal", name: "万圣节生成", text: "pumpkin season",
+    desc: "世界开局自带南瓜。" },
+  { cat: "terrain", sub: "C", domain: "", name: "彩虹要素", text: "rainbow road",
+    desc: "世界包含各类彩虹色物块及更多内容。" },
+  { cat: "terrain", sub: "C", domain: "life_tree", name: "多生命树", text: "save the rainforest",
+    desc: "世界拥有更多、更大的生命树。" },
+  { cat: "terrain", sub: "C", domain: "sky_island", name: "多漂浮岛", text: "the care bears movie",
+    desc: "世界拥有更多漂浮岛。" },
+  { cat: "terrain", sub: "C", domain: "", name: "处处臭臭", text: "truck stop",
+    desc: "世界遍布臭臭块。" },
+  { cat: "terrain", sub: "C", domain: "", name: "宝箱传送枪", text: "we don't even test for that",
+    desc: "传送枪可在任何宝箱中生成。" },
+  { cat: "terrain", sub: "C", domain: "trap_density", name: "无陷阱", text: "no traps",
+    desc: "名字叫无陷阱，实际生成巨量陷阱，包括飞镖陷阱、炸药和巨石陷阱，很多与雕像相连。" },
+
+  // ---------- 玩法影响 ----------
+  { cat: "gameplay", sub: "", domain: "meta", name: "Celebration Mk 10", text: "celebrationmk10",
+    desc: "十周年庆祝世界，世界被涂成亮色，宝箱物品有“最佳”修饰语，稀有物品掉率提高，出现丛林模仿者和金史莱姆。" },
+  { cat: "gameplay", sub: "", domain: "meta", name: "永恒领域", text: "constant",
+    desc: "与《饥荒》联动，引入饥饿和黑暗机制，世界色调阴暗，仙人掌会伤害玩家，地表生成蜘蛛洞。" },
+  { cat: "gameplay", sub: "", domain: "difficulty", name: "为了值得", text: "for the worthy",
+    desc: "大幅增加难度，敌人伤害和生命值提升，兔子变成爆炸兔，部分水变岩浆，罐子可能掉炸弹，Boss 增强。" },
+  { cat: "gameplay", sub: "", domain: "weather", name: "雨下整年", text: "bring a towel",
+    desc: "世界永无休止地下着雨。" },
+  { cat: "gameplay", sub: "", domain: "seasonal", name: "无尽万圣", text: "hocus pocus",
+    desc: "万圣节事件始终开启。" },
+  { cat: "gameplay", sub: "", domain: "seasonal", name: "无尽圣诞", text: "jingle all the way",
+    desc: "圣诞节事件始终开启。" },
+  { cat: "gameplay", sub: "", domain: "weather", name: "更多雷击", text: "electric boogaloo",
+    desc: "更多雷击。" },
+  { cat: "gameplay", sub: "", domain: "weather", name: "无雷击", text: "calm before the storm",
+    desc: "禁用雷击。" },
+  { cat: "gameplay", sub: "", domain: "spawn", name: "随机生成点", text: "how did I get here",
+    desc: "初始生成点随机。" },
+  { cat: "gameplay", sub: "", domain: "spawn", name: "团队生成点", text: "royale with cheese",
+    desc: "玩家生成点按队伍颜色区分。" },
+  { cat: "gameplay", sub: "", domain: "dungeon", name: "对偶地牢", text: "double daring dangers",
+    desc: "双地牢探索体验。" },
+  { cat: "gameplay", sub: "", domain: "meta", name: "错误世界", text: "I am error",
+    desc: "错误世界，猫狗同屋，天下大乱。" },
+  { cat: "gameplay", sub: "", domain: "start_event", name: "开局血月墓地", text: "night of the living dead",
+    desc: "世界遍布墓地，开局就是血月。" },
+  { cat: "gameplay", sub: "", domain: "difficulty", name: "开局困难模式", text: "too easy",
+    desc: "世界开局即为困难模式。" },
+  { cat: "gameplay", sub: "", domain: "player_state", name: "吸血鬼症", text: "what a horrible night to have a curse",
+    desc: "玩家是吸血鬼，必须不惜一切代价避开阳光。" },
+
+  // ---------- 仅外观 ----------
+  { cat: "visual", sub: "", domain: "visual_filter", name: "回声世界", text: "invisible plane",
+    desc: "世界覆上了回声涂层，图格不可见。" },
+  { cat: "visual", sub: "", domain: "visual_filter", name: "灰度世界", text: "monochrome",
+    desc: "世界被涂成灰色。" },
+  { cat: "visual", sub: "", domain: "visual_filter", name: "反色世界", text: "negative infinity",
+    desc: "世界被涂成反色。" },
+  { cat: "visual", sub: "", domain: "visual_filter", name: "夜明世界", text: "x-ray vision",
+    desc: "世界覆上了发光涂层，所有方块和墙壁以最大光度显示。" }
+];
+
+
+/* ============================================================
+ * 【方案 A】硬冲突
+ * ============================================================ */
+const CONFLICTS = [
+  ["save the rainforest", "toadstool", "蘑菇地表会覆盖地表，生命树几乎无法生成"],
+  ["planetoids", "waterpark", "圆形悬浮地块无法蓄水，水世界的水会大量流失"],
+  ["get fixed boi", "not the bees", "天顶本身已包含蜜蜂世界特性，叠加冗余"],
+  ["get fixed boi", "dont dig up", "天顶本身已包含 Remix 特性，叠加冗余"],
+  ["get fixed boi", "for the worthy", "天顶本身已包含 FTW 难度特性，叠加冗余"],
+  ["mole people", "does that sparkle", "无地表世界没有地表层，神圣地表无处生成"],
+  ["mole people", "toadstool", "无地表世界没有地表层，蘑菇地表无处生成"],
+  ["mole people", "waterpark", "无地表世界没有地表层，多液世界的水无处可放"],
+  ["mole people", "the care bears movie", "无地表世界没有地表层，漂浮岛失去参照"],
+  ["mole people", "save the rainforest", "无地表世界没有地表层，生命树无处生长"],
+  ["mole people", "such great heights", "无地表与太空地表逻辑直接矛盾，无法同时生效"],
+];
+
+/* ============================================================
+ * 【方案 C】软冲突
+ * ============================================================ */
+const SOFT_CONFLICTS = [
+  ["fish mox", "5162020", "醉酒世界强制生成腐化+猩红，无感染可能被覆盖"],
+  ["fish mox", "purify this", "世界被感染强制铺满邪恶，无感染可能被覆盖"],
+];
+
+/* ============================================================
+ * 固定排除
+ * ============================================================ */
+const EXCLUDED_TEXTS = new Set([
+  "I am error",
+  "how did I get here",
+  "royale with cheese",
+  "truck stop",
+]);
+
+/* ============================================================
+ * 用户勾选排除
+ * ============================================================ */
+const userExcluded = new Set();
+
+
+/* ============================================================
+ * 工具函数
+ * ============================================================ */
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function hasHardConflict(candidate, picks) {
+  for (const pair of CONFLICTS) {
+    const a = pair[0], b = pair[1];
+    if (candidate.text === a && picks.some(s => s.text === b)) return true;
+    if (candidate.text === b && picks.some(s => s.text === a)) return true;
+  }
+  return false;
+}
+
+function hasDomainCollision(candidate, picks) {
+  if (!candidate.domain) return false;
+  return picks.some(s => s.domain && s.domain === candidate.domain);
+}
+
+
+/* ============================================================
+ * 抽取核心
+ * ============================================================ */
+function pickFrom(cat, sub, n, alreadyPicked) {
+  alreadyPicked = alreadyPicked || [];
+  if (n <= 0) return [];
+
+  const baseFilter = s => {
+    if (s.cat !== cat) return false;
+    if (sub && s.sub !== sub) return false;
+    if (EXCLUDED_TEXTS.has(s.text)) return false;
+    if (hasDomainCollision(s, alreadyPicked)) return false;
+    if (hasHardConflict(s, alreadyPicked)) return false;
+    return true;
+  };
+
+  let pool = SEEDS.filter(s => baseFilter(s) && !userExcluded.has(s.text));
+  let ignoredUser = false;
+
+  if (pool.length === 0) {
+    pool = SEEDS.filter(baseFilter);
+    if (pool.length > 0) ignoredUser = true;
+  }
+
+  if (pool.length === 0) {
+    pool = SEEDS.filter(s =>
+      s.cat === cat &&
+      (!sub || s.sub === sub) &&
+      !EXCLUDED_TEXTS.has(s.text)
+    );
+  }
+
+  if (pool.length === 0) return [];
+
+  n = Math.min(n, pool.length);
+  for (let i = 0; i < n; i++) {
+    const j = randInt(i, pool.length - 1);
+    const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+  }
+
+  const result = pool.slice(0, n);
+  if (ignoredUser) result._ignoredUser = true;
+  return result;
+}
+
+
+/* ============================================================
+ * 按规则生成数量
+ * ============================================================ */
+function rollCounts() {
+  const A = ROLL_RULES.A, B = ROLL_RULES.B, C = ROLL_RULES.C;
+  const G = ROLL_RULES.GAMEPLAY, V = ROLL_RULES.VISUAL;
+  const GLOBAL = ROLL_RULES.GLOBAL;
+  let a, b, c, guard = 0;
+
+  while (true) {
+    guard++;
+    if (guard > 5000) {
+      a = A.min; b = B.min; c = C.min;
+      if (a + b + c < GLOBAL.minTotalTerrain) {
+        a = Math.min(A.max, Math.max(a, GLOBAL.minTotalTerrain));
+      }
+      break;
+    }
+    a = A.allowZero ? randInt(A.min, A.max) : randInt(Math.max(A.min, 1), A.max);
+    b = B.allowZero ? randInt(B.min, B.max) : randInt(Math.max(B.min, 1), B.max);
+    c = C.allowZero ? randInt(C.min, C.max) : randInt(Math.max(C.min, 1), C.max);
+
+    const total = a + b + c;
+    if (total < GLOBAL.minTotalTerrain) continue;
+    if (total > GLOBAL.maxTotalTerrain) continue;
+    break;
+  }
+
+  const gCount = G.allowZero ? randInt(G.min, G.max) : randInt(Math.max(G.min, 1), G.max);
+  const vCount = V.allowZero ? randInt(V.min, V.max) : randInt(Math.max(V.min, 1), V.max);
+
+  return { a: a, b: b, c: c, g: gCount, v: vCount };
+}
+
+
+/* ============================================================
+ * 主逻辑
+ * ============================================================ */
+function roll() {
+  const counts = rollCounts();
+  const picked = [];
+  let userFilterIgnored = false;
+
+  const aPicks = pickFrom("terrain", "A", counts.a, picked);
+  if (aPicks._ignoredUser) userFilterIgnored = true;
+  picked.push.apply(picked, aPicks);
+
+  const bPicks = pickFrom("terrain", "B", counts.b, picked);
+  if (bPicks._ignoredUser) userFilterIgnored = true;
+  picked.push.apply(picked, bPicks);
+
+  const cPicks = pickFrom("terrain", "C", counts.c, picked);
+  if (cPicks._ignoredUser) userFilterIgnored = true;
+  picked.push.apply(picked, cPicks);
+
+  const gameplayPicks = pickFrom("gameplay", "", counts.g, picked);
+  if (gameplayPicks._ignoredUser) userFilterIgnored = true;
+  picked.push.apply(picked, gameplayPicks);
+
+  const visualPicks = pickFrom("visual", "", counts.v, picked);
+  if (visualPicks._ignoredUser) userFilterIgnored = true;
+
+  render(
+    aPicks.concat(bPicks, cPicks),
+    gameplayPicks,
+    visualPicks,
+    counts,
+    userFilterIgnored
+  );
+}
+
+
+/* ============================================================
+ * 软冲突检测
+ * ============================================================ */
+function detectSoftConflicts(allPicks) {
+  const found = [];
+  const texts = allPicks.map(s => s.text);
+  for (const pair of SOFT_CONFLICTS) {
+    const a = pair[0], b = pair[1], reason = pair[2];
+    if (texts.indexOf(a) !== -1 && texts.indexOf(b) !== -1) {
+      found.push({ a: a, b: b, reason: reason });
+    }
+  }
+  return found;
+}
+
+function seedSoftTags(seed, allPicks) {
+  const tags = [];
+  const texts = allPicks.map(s => s.text);
+  for (const pair of SOFT_CONFLICTS) {
+    const a = pair[0], b = pair[1];
+    if (seed.text === a && texts.indexOf(b) !== -1) tags.push(b);
+    if (seed.text === b && texts.indexOf(a) !== -1) tags.push(a);
+  }
+  return tags;
+}
+
+
+/* ============================================================
+ * 渲染
+ * ============================================================ */
+function render(terrainPicks, gameplayPicks, visualPicks, counts, userFilterIgnored) {
+  const out = document.getElementById("output");
+  const allPicks = terrainPicks.concat(gameplayPicks, visualPicks);
+  let html = "";
+
+  const softConflicts = detectSoftConflicts(allPicks);
+  if (userFilterIgnored) {
+    html += '<div class="banner warn">⚠️ 你勾选的排除项过多，导致某一类无可选种子，已自动忽略部分排除以保证能抽出结果。</div>';
+  }
+  if (softConflicts.length === 0 && !userFilterIgnored) {
+    html += '<div class="banner ok">✅ 本组未检测到明显冲突，可放心开图。</div>';
+  } else if (softConflicts.length > 0) {
+    html += '<div class="banner warn">⚠️ 检测到 ' + softConflicts.length + ' 处潜在冲突/冗余：<br>';
+    for (const c of softConflicts) {
+      html += '· <b>' + escapeHtml(c.a) + '</b> × <b>' + escapeHtml(c.b) + '</b> —— ' + escapeHtml(c.reason) + '<br>';
+    }
+    html += '</div>';
+  }
+
+  // ---- 地形变化（并排，每行最多 3） ----
+  html += '<div class="section-title">【地形变化】</div>';
+  if (terrainPicks.length === 0) {
+    html += '<div class="empty">本次未抽取地形变化类种子。</div>';
+  } else {
+    html += '<div class="seed-grid">';
+    for (const s of terrainPicks) {
+      const softTags = seedSoftTags(s, allPicks);
+      const cardClass = softTags.length > 0 ? "seed-card redundant" : "seed-card";
+      const tagHtml = softTags.length > 0
+        ? '<span class="seed-tag tag-redundant">与 ' + escapeHtml(softTags.join(" / ")) + ' 可能冲突</span>'
+        : "";
+      html += '<div class="' + cardClass + '">'
+           +  '<div class="seed-name">' + escapeHtml(s.name)
+           +  ' <span class="seed-sub">' + escapeHtml(s.sub) + ' 类</span>' + tagHtml + '</div>'
+           +  '<div><span class="seed-text">' + escapeHtml(s.text) + '</span></div>'
+           +  '<div class="seed-desc">' + escapeHtml(s.desc) + '</div>'
+           +  '</div>';
+    }
+    html += '</div>';
+  }
+
+  // ---- 玩法影响（并排，每行最多 3） ----
+  html += '<div class="section-title">【玩法影响】</div>';
+  if (gameplayPicks.length === 0) {
+    html += '<div class="empty">本次未抽取玩法影响类种子。</div>';
+  } else {
+    html += '<div class="seed-grid">';
+    for (const s of gameplayPicks) {
+      const softTags = seedSoftTags(s, allPicks);
+      const cardClass = softTags.length > 0 ? "seed-card gameplay redundant" : "seed-card gameplay";
+      const tagHtml = softTags.length > 0
+        ? '<span class="seed-tag tag-redundant">与 ' + escapeHtml(softTags.join(" / ")) + ' 可能冲突</span>'
+        : "";
+      html += '<div class="' + cardClass + '">'
+           +  '<div class="seed-name">' + escapeHtml(s.name) + tagHtml + '</div>'
+           +  '<div><span class="seed-text">' + escapeHtml(s.text) + '</span></div>'
+           +  '<div class="seed-desc">' + escapeHtml(s.desc) + '</div>'
+           +  '</div>';
+    }
+    html += '</div>';
+  }
+
+  // ---- 仅外观（如果以后启用） ----
+  if (visualPicks.length > 0) {
+    html += '<div class="section-title">【仅外观】</div>';
+    html += '<div class="seed-grid">';
+    for (const s of visualPicks) {
+      html += '<div class="seed-card">'
+           +  '<div class="seed-name">' + escapeHtml(s.name) + '</div>'
+           +  '<div><span class="seed-text">' + escapeHtml(s.text) + '</span></div>'
+           +  '<div class="seed-desc">' + escapeHtml(s.desc) + '</div>'
+           +  '</div>';
+    }
+    html += '</div>';
+  }
+
+  out.innerHTML = html;
+}
+
+
+/* ============================================================
+ * 复选框构建（两个）
+ * ============================================================ */
+function buildFilters() {
+  const groups = [
+    { el: "filterTerrain",  cat: "terrain"  },
+    { el: "filterGameplay", cat: "gameplay" }
+  ];
+
+  for (const g of groups) {
+    const box = document.getElementById(g.el);
+    if (!box) continue;
+
+    const items = SEEDS
+      .filter(s => s.cat === g.cat)
+      .filter(s => !EXCLUDED_TEXTS.has(s.text));
+
+    let inner = "";
+    for (const s of items) {
+      const t = escapeHtml(s.text);
+      inner += '<label class="filter-item" data-text="' + t + '">'
+            +  '<input type="checkbox" data-text="' + t + '">'
+            +  '<span>' + escapeHtml(s.name) + '</span>'
+            +  '</label>';
+    }
+    box.innerHTML = inner;
+  }
+
+  document.querySelectorAll('.filter-list').forEach(list => {
+    list.removeEventListener('change', onFilterChange);
+    list.addEventListener('change', onFilterChange);
+  });
+
+  // 两个标题点击：任意一个 → 两个一起展开/折叠
+  document.querySelectorAll('.filter-title').forEach(btn => {
+    btn.removeEventListener('click', onTitleClick);
+    btn.addEventListener('click', onTitleClick);
+  });
+}
+
+function onFilterChange(e) {
+  const cb = e.target;
+  if (cb.type !== 'checkbox') return;
+
+  const t = cb.dataset.text;
+  const label = cb.closest('.filter-item');
+
+  if (cb.checked) {
+    userExcluded.add(t);
+    if (label) label.classList.add('checked');
+  } else {
+    userExcluded.delete(t);
+    if (label) label.classList.remove('checked');
+  }
+}
+
+/* 任意一个标题被点击 → 两个过滤区一起展开或一起折叠 */
+function onTitleClick(e) {
+  const groups = document.querySelectorAll('#filtersBox .filter-group');
+  const anyExpanded = Array.prototype.some.call(groups, g => g.classList.contains('expanded'));
+  const targetState = !anyExpanded;
+  groups.forEach(g => {
+    if (targetState) g.classList.add('expanded');
+    else g.classList.remove('expanded');
+  });
+}
+
+
+/* ============================================================
+ * 规则展示区（放最下面）
+ * ============================================================ */
+function renderRulesBox() {
+  const R = ROLL_RULES;
+  const list = document.getElementById("rulesList");
+  if (!list) return;
+  const items = [
+    'A 类（整体结构剧变）：<code>' + R.A.min + ' ~ ' + R.A.max + '</code> 个，允许为 0：<code>' + R.A.allowZero + '</code>',
+    'B 类（大片地形替换）：<code>' + R.B.min + ' ~ ' + R.B.max + '</code> 个，允许为 0：<code>' + R.B.allowZero + '</code>',
+    'C 类（局部结构增减）：<code>' + R.C.min + ' ~ ' + R.C.max + '</code> 个，允许为 0：<code>' + R.C.allowZero + '</code>',
+    '玩法影响：<code>' + R.GAMEPLAY.min + ' ~ ' + R.GAMEPLAY.max + '</code> 个，允许为 0：<code>' + R.GAMEPLAY.allowZero + '</code>',
+    '仅外观：<code>' + R.VISUAL.min + ' ~ ' + R.VISUAL.max + '</code> 个，允许为 0：<code>' + R.VISUAL.allowZero + '</code>',
+    '地形总数上限（A+B+C）：<code>' + R.GLOBAL.maxTotalTerrain + '</code>',
+    '地形总数下限（A+B+C）：<code>' + R.GLOBAL.minTotalTerrain + '</code>'
+  ];
+  let html = "";
+  for (const it of items) html += '<li>' + it + '</li>';
+  list.innerHTML = html;
+}
+
+
+/* ============================================================
+ * 按钮绑定 + 初始化
+ * ============================================================ */
+document.getElementById("rollBtn").addEventListener("click", roll);
+
+document.getElementById("clearBtn").addEventListener("click", function () {
+  userExcluded.clear();
+  const checkboxes = document.querySelectorAll('.filter-item input[type="checkbox"]');
+  for (let i = 0; i < checkboxes.length; i++) {
+    checkboxes[i].checked = false;
+    const label = checkboxes[i].closest('.filter-item');
+    if (label) label.classList.remove('checked');
+  }
+});
+
+// 初始化：构建复选框 → 规则展示 → 自动生成一组
+buildFilters();
+renderRulesBox();
+roll();
+</script>
+</body>
+</html>
